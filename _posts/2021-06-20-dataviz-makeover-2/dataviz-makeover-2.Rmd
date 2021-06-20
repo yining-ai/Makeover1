@@ -16,6 +16,7 @@ output:
 
 # 1). Original Visualization
 ![](graph/original.png)
+
 # 2). Critiques and Suggestions for the Original Visualization
 
 ## 2.1 Critiques:
