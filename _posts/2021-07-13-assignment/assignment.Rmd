@@ -1,0 +1,453 @@
+---
+title: "Assignment"
+description: |
+  A short description of the post.
+author:
+  - name: Yining Bai
+    url: {}
+date: 07-13-2021
+output:
+  distill::distill_article:
+    self_contained: false
+---
+
+
+```{r setup, include=FALSE}
+options(htmltools.dir.version = FALSE)
+knitr::opts_chunk$set(fig.retins=3,
+                      echo = TRUE,
+                      eval = TRUE,
+                      message = FALSE,
+                      warning = FALSE)
+```
+
+# Introduction
+
+Many of the Abila, Kronos-based employees of GAStech have company cars which are approved for both personal and business use. Those who do not have company cars have the ability to check out company trucks for business use, but these trucks cannot be used for personal business.
+
+Employees with company cars are happy to have these vehicles, because the company cars are generally much higher quality than the cars they would be able to afford otherwise. However, GAStech does not trust their employees. Without the employees? knowledge, GAStech has installed geospatial tracking software in the company vehicles. The vehicles are tracked periodically as long as they are moving.
+
+This vehicle tracking data has been made available to law enforcement to support their investigation. Unfortunately, data is not available for the day the GAStech employees went missing. Data is only available for the two weeks prior to the disappearance.
+
+To promote local businesses, Kronos based companies provide a Kronos Kares benefit card to GASTech employees giving them discounts and rewards in exchange for collecting information about their credit card purchases and preferences as recorded on loyalty cards. This data has been made available to investigators in the hopes that it can help resolve the situation. However, Kronos Kares does not collect personal information beyond purchases.
+
+# Question1
+
+In this question, we need to find out the popular locations. Dataset cc_data and loyalty_data will be used in this question.
+
+Firstly, a loop structure is created to library all the packages needed.
+
+```{r} 
+packages = c('igraph', 'tidygraph', 'ggraph', 'visNetwork', 'lubridate', 'clock', 'tidyverse','dplyr', 'tidyr','raster','sf','sp','tmap', 'gifski', 'writexl', 'mapview', "ggplot2", 'dplyr')
+for (p in packages){
+  if(!require(p, character.only = T)){
+    install.packages(p)
+  }
+  library(p,character.only = T)
+}
+```
+
+
+Load the credit card dataset in the environment. We can also use the function "glimpse" to check the data type of the variables.
+
+```{r}
+credit_card <- read.csv("data_MC2/cc_data.csv")
+glimpse(credit_card)
+```
+
+Load the loyalty card dataset in the environment.
+
+```{r}
+loyalty_card <- read.csv("data_MC2/loyalty_data.csv")
+glimpse(loyalty_card)
+```
+
+Change the datatype of variable timestamp from character to date-time format.
+
+```{r}
+credit_card$timestamp <- date_time_parse(credit_card$timestamp,
+                zone = "",
+                format = "%m/%d/%Y %H:%M")
+glimpse(credit_card)
+```
+
+Change the datatype of variable timestamp from character to date format.
+
+```{r}
+loyalty_card$timestamp <- date_time_parse(loyalty_card$timestamp,
+                zone = "",
+                format = "%m/%d/%Y")
+glimpse(loyalty_card)
+```
+
+In order to explore the further corresponding relationship between credit card and loyalty card, we need to join the two datatables together. However, considering that there is not a common column for joining, a new column "Date" is needed to be extracted from the variable timestamp in credit_card.csv. 
+
+```{r}
+credit_card$Date <- format(credit_card$timestamp, format="%Y-%m-%d")
+credit_card$Date <- date_time_parse(credit_card$Date,
+                           zone = "",
+                           format = "%Y-%m-%d")
+glimpse(credit_card)
+
+```
+
+Then, we can use variable "Date", "location", and "price" to finish the full join of the two tables. According to the regulation of Gas Tech, the records of loyalty card are usually along with the records of credit card. Therefore, we can find out the combination of credit card and loyalty card after joining.
+
+```{r}
+card_joined <- credit_card %>%
+  full_join(loyalty_card, by = c("Date" = "timestamp", "location", "price"))
+
+```
+
+
+In order to find out the popular locations, we need to the calculate the number of records of locations and then choose those with more records. Popular locations are explored for credit cards and loyalty cards separately. 
+
+```{r}
+popular_credit_card <- credit_card %>%
+  group_by(location) %>%
+  summarise(count = n()) %>%
+  arrange(desc(count))
+```
+
+```{r}
+popular_loyalty_card <- loyalty_card %>%
+  group_by(location) %>%
+  summarise(count = n()) %>%
+  arrange(desc(count))
+  
+```
+
+
+According to the datatable, we will consider the Top6 as the popular locations.
+
+```{r}
+popular_top_credit <- popular_credit_card %>%
+ 
+ gather(location, count) %>%
+ arrange(desc(count)) %>%
+ top_n(6)
+
+popular_top_credit
+
+```
+Then we can draw the bar chart of the popular locations selected.
+
+```{r}
+top6_credit<-ggplot(data=popular_top_credit, aes(x=location, y=count)) +
+  geom_bar(stat="identity", fill="steelblue")+
+  theme_minimal()
+top6_credit
+
+```
+
+```{r}
+popular_top_loyalty <- popular_loyalty_card %>%
+ 
+ gather(location, count) %>%
+ arrange(desc(count)) %>%
+ top_n(6)
+
+popular_top_loyalty
+
+```
+
+```{r}
+top6_loyalty<-ggplot(data=popular_top_loyalty, aes(x=location, y=count)) +
+  geom_bar(stat="identity", fill="steelblue")+
+  theme_minimal()
+top6_loyalty
+
+```
+
+Therefore, combining the result of loyalty card and credit card, the popular locations are the 6 locations shown before. And we can also create a new datatable only containing the card information of popular locations.
+
+```{r}
+popular_locations <- card_joined %>%
+  filter(location %in% c("Katerina's Cafe", "Hippokampos", "Guy's Gyros", "Brew've Been Served", "Ouzeri Elian", "Hallowed Grounds")) %>%
+  drop_na(timestamp) %>%
+  dplyr::select(-Date)
+```
+
+The peak time in the Katerina's Cafe is 13pm - 14pm and 19pm - 20pm, which are the lunch time and dinner time respectively. Similarly, Hippokampos, Guy's Gyros and Ouzeri Elian are all restaurants and they have the same peak hours as Katerina's Cafe.
+
+```{r}
+popular_locations %>%
+  filter(location == "Katerina's Cafe")
+
+```
+Brew've Been Served and Hallowed Grounds are all coffee shop and the peak hours are 7am-8am.
+
+Actually, as loyalty card can be considered as the proof of personal identity, generally, one loyalty card can only be used by one person. And credit can only be owned or used by one person unless there is kinship between two users. Therefore, one credit card can only be related to one loyalty card. Once there are several loyalty cards records under the same credit card, such credit card should be labeled as abnormal one.
+
+```{r}
+abnormal_credit_card <- popular_locations %>%
+  drop_na(loyaltynum) %>%
+  group_by(last4ccnum) %>%
+  summarize(loy_n = n_distinct(loyaltynum)) %>%
+  filter(loy_n > 1)
+abnormal_credit_card 
+```
+
+The abnormal credit cards are as shown before, which will be analyzed further in the following parts.
+
+
+
+
+
+
+# Question2
+
+In this question, the abnormal records are required to combine with vehicle data to dig out more information. The data "car_assignment" is comparably simple which only include some basic information of employees and there is no connections between card information and car information. So the data of gps should be used in this question.
+
+
+Firstly, we should load the map in the environment.
+
+```{r}
+bgmap <- raster("data_MC2/MC2-tourist.tif")
+bgmap
+```
+
+Plot raster layer.
+
+```{r}
+tmap_mode("plot")
+tm_shape(bgmap) +
+  tm_raster(bgmap,
+            legend.show = FALSE)
+```
+
+
+```{r}
+tm_shape(bgmap) +
+tm_rgb(bgmap, r = 1,g = 2,b = 3,
+       alpha = NA,
+       saturation = 1,
+       interpolate = TRUE,
+       max.value = 255)
+
+```
+
+Import vector GIS data file.
+
+```{r}
+Abila_st <- st_read(dsn = "data_MC2/Geospatial",
+layer = "Abila")
+```
+
+
+In order to create relationship between credit card records and gps information, we need to find out the parking time and the driving time associated with each transaction. Here a new variable "Time Difference" is created to calculate the time interval.
+
+```{r}
+gps2 <- read_csv("data_MC2/gps2.csv")
+glimpse(gps2)
+```
+
+Change the datatype of variable Timestamp.
+
+```{r}
+gps2$Timestamp <- date_time_parse(gps2$Timestamp,
+                zone = "",
+                format = "%m/%d/%Y %H:%M")
+gps2$id <- as_factor(gps2$id)
+
+```
+
+To create the roadmap, longitude and latitude should be combined as a coordination point.
+
+```{r}
+gps_sf <- st_as_sf(gps2, 
+                   coords = c("long", "lat"),
+                       crs= 4326)
+```
+
+
+To facilitate filtering, variables "day", "hour" and "minute" can be extracted.
+
+```{r}
+gps_sf$day <- format(gps_sf$Timestamp, format="%d")
+gps_sf$hour <- format(gps_sf$Timestamp, format="%H")
+gps_sf$minute <- format(gps_sf$Timestamp, format="%M")
+```
+
+Find out those stop time points whose time interval is longer than 3 minutes.
+
+```{r}
+more_than_3mins <- gps_sf %>%
+  filter(Seconds >180)
+```
+
+
+```{r}
+gps_path <- gps_sf %>%
+  group_by(id, day, hour, minute) %>%
+  summarize(m = mean(Timestamp), 
+            do_union=FALSE) %>%
+  st_cast("LINESTRING")
+```
+
+```{r}
+p = npts(gps_path, by_feature = TRUE)
+gps_path2 <- cbind(gps_path, p)
+
+```
+
+```{r}
+gps_path2 <- gps_path2 %>%
+  filter(p>1)
+```
+
+Draw the roadmap. We can draw movement track at any hour and minute. This can help us to show the employees' daily lives.
+
+```{r}
+gps_path_selected <- gps_path2 %>%
+  filter(day == "06", hour == "08")
+tmap_mode("view")
+tm_shape(bgmap) +
+  tm_rgb(bgmap, r = 1,g = 2,b = 3,
+       alpha = NA,
+       saturation = 1,
+       interpolate = TRUE,
+       max.value = 255) +
+  tm_shape(gps_path_selected) +
+  tm_lines()
+```
+
+In order to find those abnormal points, point graph can be drawn to help build connection between car ID and transaction location. We can firstly select the abnormal credit cards' information.
+
+```{r}
+card_selected <- card_joined %>%
+  filter(last4ccnum == 1286)
+```
+
+
+```{r}
+gps_dot <- more_than_3mins %>%
+  group_by(id, hour, day, minute) %>%
+  summarize(geo_n = n_distinct(geometry)) %>%
+  st_cast("POINT")
+```
+
+We can draw anyone's stop point on any day at any time. Then set the abnormal time to dig out the suspicious activities.
+
+```{r echo=FALSE, eval=TRUE, fig.height=6}
+gps_dots_selected <- gps_dot %>%
+  filter(day=='06',hour=='08', minute >'16')
+tmap_mode("view")
+tm_shape(bgmap) +
+  tm_rgb(bgmap, r = 1,g = 2,b = 3,
+       alpha = NA,
+       saturation = 1,
+       interpolate = TRUE,
+       max.value = 255) +
+  tm_shape(gps_dots_selected) +
+  tm_dots()
+```
+
+
+In this way, we can find the ownerships of credit cards.
+
+```{r}
+abnormal_cc <- read_csv("data_MC2/abnormal_cc.csv")
+abnormal_cc
+
+```
+
+
+# Question 3
+
+In this question, we can use the same method to draw the dot graph to recognize all the owners of credit cards as the Questions shown before. Now we can infer all the ownerships.
+
+```{r}
+total_match <- read_csv("data_MC2/total_match.csv")
+total_match
+
+```
+
+# Question 4
+
+When compare the transaction records and gps information, we found that some vehicles were in the same geographical location at the same time. Such institution can be regarded as suspicious ones and to draw their  
+movement track to explore their relationship.
+
+The first suspicious pair we find is card ID 33 and 7.
+The line graph and dot graph are dyrawn below. The two visited the Chostus Hotel several time at 13pm and visited restaurants at evening. And they even have some tracks in the same apartment. The owners of the cars are Elsa Orilla and Brand Tempestad
+seperately. And they have the same employment type and employment title.
+
+```{r}
+gps_path_selected2 <- gps_path2 %>%
+  filter(id %in% c(7,33))
+tmap_mode("view")
+tm_shape(bgmap) +
+  tm_rgb(bgmap, r = 1,g = 2,b = 3,
+       alpha = NA,
+       saturation = 1,
+       interpolate = TRUE,
+       max.value = 255) +
+  tm_shape(gps_path_selected2) +
+  tm_lines(col = 'id', style = "fixed")
+```
+
+```{r echo=FALSE, eval=TRUE, fig.height=6}
+gps_dots_selected <- gps_dot %>%
+  filter(id %in% c(7,33))
+tmap_mode("view")
+tm_shape(bgmap) +
+  tm_rgb(bgmap, r = 1,g = 2,b = 3,
+       alpha = NA,
+       saturation = 1,
+       interpolate = TRUE,
+       max.value = 255) +
+  tm_shape(gps_dots_selected) +
+  tm_dots(col = 'id', style = "fixed")
+```
+
+The second suspect group are Car ID 22, 30 and 15. There is a lot of overlap in the tracks of these cars. They often buy coffee in Brew've been Served and often have lunch in the nearby restaurants. The owners of the three cars are Nubarron Adra, Loreto Bodrogi and Felix Resumir. These three employees are all security guards. Therefore, we can assume that they have comparably close relationship.
+
+
+```{r}
+gps_path_selected2 <- gps_path2 %>%
+  filter(id %in% c(22,30,15))
+tmap_mode("view")
+tm_shape(bgmap) +
+  tm_rgb(bgmap, r = 1,g = 2,b = 3,
+       alpha = NA,
+       saturation = 1,
+       interpolate = TRUE,
+       max.value = 255) +
+  tm_shape(gps_path_selected2) +
+  tm_lines(col = 'id', style = "fixed")
+```
+
+```{r echo=FALSE, eval=TRUE, fig.height=6}
+gps_dots_selected <- gps_dot %>%
+  filter(id %in% c(22,30,15))
+tmap_mode("view")
+tm_shape(bgmap) +
+  tm_rgb(bgmap, r = 1,g = 2,b = 3,
+       alpha = NA,
+       saturation = 1,
+       interpolate = TRUE,
+       max.value = 255) +
+  tm_shape(gps_dots_selected) +
+  tm_dots(col = 'id', style = "fixed")
+```
+
+
+# Question 5
+
+We draw dot plot at 2am, 3am, 4am, and 5am when generally very few people are outside. 15, 21, 24 and 16 are suspicious car id. There are several people gathering in the Frydo's Autosupply N More. Someone even drive to parks far from the downtown center. Therefore, there are some suspicious activity locations: Spetson Park, Taxiarchon Park and Frydo's Autosupply N More.
+
+```{r echo=FALSE, eval=TRUE, fig.height=6}
+gps_dots_selected <- gps_dot %>%
+  filter(hour %in% c("02","03","04","05"))
+tmap_mode("view")
+tm_shape(bgmap) +
+  tm_rgb(bgmap, r = 1,g = 2,b = 3,
+       alpha = NA,
+       saturation = 1,
+       interpolate = TRUE,
+       max.value = 255) +
+  tm_shape(gps_dots_selected) +
+  tm_dots(col = 'id', style = "fixed")
+```
+
+
